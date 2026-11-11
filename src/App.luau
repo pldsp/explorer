@@ -5,6 +5,7 @@ local Inspector = require(script.Parent.Inspector)
 local Selection = require(script.Parent.Selection)
 local Janitor = require(script.Parent.Janitor)
 local Config = require(script.Parent.Config)
+local ScriptViewer = require(script.Parent.ScriptViewer)
 local App = {}
 App.__index = App
 
@@ -13,7 +14,9 @@ function App.new(parent)
 	local ok, err = xpcall(function()
 	self.window = Window.new(parent)
 	local window = self.window
-	self.inspector = Inspector.new(window.inspector, function(message, isError) window:SetStatus(message, isError) end)
+	self.inspector = Inspector.new(window.inspector, function(message, isError) window:SetStatus(message, isError) end, window.propertySearch)
+	self.scriptViewer = ScriptViewer.new(window.gui, window.frame)
+	window.onToggle = function(visible) if not visible then self.scriptViewer:Hide() end end
 	self.selection = Selection.new(workspace, function(item)
 		self.view:Select(item)
 		if self.inspector.item ~= item then self.inspector:Select(item) end
@@ -40,6 +43,14 @@ function App.new(parent)
 		local ok, message = self.selection:Focus()
 		window:SetStatus(message, not ok)
 	end))
+	local function viewScript()
+		local item = self.selection.item
+		if not item or not item:IsA("LuaSourceContainer") then window:SetStatus("Select a script to view its source", true); return end
+		self.scriptViewer:Open(item)
+	end
+	self.janitor:Add(window.viewScript.Activated:Connect(viewScript))
+	self.janitor:Add(window.scriptAction.Activated:Connect(viewScript))
+	self.view.openScript = viewScript
 	self.janitor:Add(window.copy.Activated:Connect(function()
 		if not self.selection.item then window:SetStatus("Select an instance first", true); return end
 		local clipboard = setclipboard or toclipboard
@@ -73,7 +84,7 @@ function App:Destroy()
 	self.dead = true
 	self.searchVersion += 1
 	self.janitor:Destroy()
-	for _, name in { "tree", "selection", "inspector", "view", "window" } do
+	for _, name in { "tree", "selection", "scriptViewer", "inspector", "view", "window" } do
 		if self[name] then self[name]:Destroy() end
 	end
 end

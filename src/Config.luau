@@ -1,12 +1,15 @@
 return {
 	ToggleKey = Enum.KeyCode.RightShift,
-	RowHeight = 14,
+	RowHeight = 22,
 	Font = Enum.Font.SourceSans,
-	TextSize = 11,
+	TextSize = 14,
 	SearchLimit = 1500,
 	SearchBatch = 300,
 	SearchDebounce = 0.25,
-	WindowSize = Vector2.new(256, 500),
+	DockWidth = 420,
+	DockRatio = 0.57,
+	DecompilerTimeout = 25,
+	MaxSourceBytes = 200000,
 	Colors = {
 		Background = Color3.fromRGB(45, 45, 45),
 		Panel = Color3.fromRGB(45, 45, 45),

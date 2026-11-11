@@ -19,6 +19,16 @@ function Codec.format(value)
 		return string.format("%g, %g, %g, %g", value.X.Scale, value.X.Offset, value.Y.Scale, value.Y.Offset)
 	elseif typeof(value) == "UDim" then
 		return string.format("%g, %g", value.Scale, value.Offset)
+	elseif typeof(value) == "CFrame" then
+		local parts = { value:GetComponents() }
+		for index, part in parts do parts[index] = string.format("%g", part) end
+		return table.concat(parts, ", ")
+	elseif typeof(value) == "BrickColor" then
+		return value.Name
+	elseif typeof(value) == "NumberRange" then
+		return string.format("%g, %g", value.Min, value.Max)
+	elseif typeof(value) == "Rect" then
+		return string.format("%g, %g, %g, %g", value.Min.X, value.Min.Y, value.Max.X, value.Max.Y)
 	end
 	return tostring(value)
 end
@@ -36,6 +46,18 @@ function Codec.parse(text, previous)
 	if kind == "Vector2" then return Vector2.new(numbers(text, 2)) end
 	if kind == "UDim2" then return UDim2.new(numbers(text, 4)) end
 	if kind == "UDim" then return UDim.new(numbers(text, 2)) end
+	if kind == "CFrame" then return CFrame.new(numbers(text, 12)) end
+	if kind == "Rect" then return Rect.new(numbers(text, 4)) end
+	if kind == "NumberRange" then
+		local minimum, maximum = numbers(text, 2)
+		assert(minimum <= maximum, "Minimum must not exceed maximum")
+		return NumberRange.new(minimum, maximum)
+	end
+	if kind == "BrickColor" then
+		local color = BrickColor.new(tonumber(text) or text)
+		assert(tonumber(text) or string.lower(color.Name) == string.lower(text), "Unknown BrickColor name")
+		return color
+	end
 	if kind == "Color3" then
 		local r, g, b = numbers(text, 3)
 		assert(r >= 0 and r <= 1 and g >= 0 and g <= 1 and b >= 0 and b <= 1, "RGB channels must be 0..1")
@@ -52,7 +74,7 @@ function Codec.parse(text, previous)
 end
 
 function Codec.editable(value)
-	return table.find({ "string", "number", "boolean", "Vector2", "Vector3", "Color3", "UDim", "UDim2", "EnumItem" }, typeof(value)) ~= nil
+	return table.find({ "string", "number", "boolean", "Vector2", "Vector3", "Color3", "UDim", "UDim2", "EnumItem", "CFrame", "BrickColor", "NumberRange", "Rect" }, typeof(value)) ~= nil
 end
 
 return Codec

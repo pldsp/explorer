@@ -14,6 +14,7 @@ local codec = luau.load(fs.readFile("src/ValueCodec.luau"), {
 	environment = {
 		Vector2 = roblox.Vector2, Vector3 = roblox.Vector3,
 		Color3 = roblox.Color3, UDim = roblox.UDim, UDim2 = roblox.UDim2,
+		CFrame = roblox.CFrame, BrickColor = roblox.BrickColor, NumberRange = roblox.NumberRange, Rect = roblox.Rect,
 	},
 })()
 assert(codec.parse("false", true) == false)
@@ -27,6 +28,9 @@ for _, text in { "nan", "inf", "1,2", "" } do
 end
 assert(not pcall(codec.parse, "yes", true))
 assert(not pcall(codec.parse, "2, 0, 0", roblox.Color3.new()))
+assert(codec.parse(codec.format(roblox.CFrame.new(1, 2, 3)), roblox.CFrame.new()) == roblox.CFrame.new(1, 2, 3))
+assert(codec.parse("1, 3", roblox.NumberRange.new(0)) == roblox.NumberRange.new(1, 3))
+assert(not pcall(codec.parse, "3, 1", roblox.NumberRange.new(0)))
 print(string.format("Compiled %d Luau files; codec checks passed.", count))
 if fs.isDir("dist/modules") then
 	local modules = fs.readDir("dist/modules")

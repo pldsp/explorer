@@ -49,7 +49,16 @@ function View:Render()
 			widget = { button = button, arrow = arrow, label = label, icon = Icons.new(button) }
 			self.pool[slot] = widget
 			self.janitor:Add(button.Activated:Connect(function()
-				if widget.row then self.selectInstance(widget.row.instance) end
+				if not widget.row then return end
+				local item = widget.row.instance
+				self.selectInstance(item)
+				local now = os.clock()
+				if widget.lastItem == item and now - (widget.lastClick or 0) < 0.35 then
+					if item:IsA("LuaSourceContainer") and self.openScript then self.openScript()
+					elseif widget.row.hasChildren then self.toggle(item) end
+					widget.lastClick = 0
+				else widget.lastClick = now end
+				widget.lastItem = item
 			end))
 			self.janitor:Add(button.MouseButton2Click:Connect(function()
 				if widget.row and self.context then
@@ -78,7 +87,7 @@ function View:Render()
 			widget.arrow.Position = UDim2.fromOffset(indent, 0)
 			widget.arrow.Text = row.hasChildren and (self.expanded[row.instance] and "▼" or "▶") or ""
 			widget.arrow.Visible = row.hasChildren
-			widget.icon.root.Position = UDim2.fromOffset(indent + 15, -1)
+			widget.icon.root.Position = UDim2.fromOffset(indent + 15, math.floor((height - 16) / 2))
 			if widget.iconClass ~= row.instance.ClassName then
 				widget.iconClass = row.instance.ClassName
 				Icons.set(widget.icon, row.instance)

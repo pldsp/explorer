@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-const files = ['README.md', '.gitignore', 'default.project.json', 'dist/manifest.json'];
+const files = ['README.md', '.gitignore', 'default.project.json', 'dist/manifest.json', 'dist/api-source.json', 'THIRD_PARTY_NOTICES.md'];
 for (const directory of ['src', 'tools', 'executor', 'dist/modules']) {
   for (const file of (await fs.readdir(directory)).sort()) files.push(`${directory}/${file}`);
 }
