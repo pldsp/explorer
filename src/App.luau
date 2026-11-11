@@ -48,7 +48,7 @@ function App.new(parent)
 		if not item or not item:IsA("LuaSourceContainer") then window:SetStatus("Select a script to view its source", true); return end
 		self.scriptViewer:Open(item)
 	end
-	self.janitor:Add(window.viewScript.Activated:Connect(viewScript))
+	if window.viewScript ~= window.scriptAction then self.janitor:Add(window.viewScript.Activated:Connect(viewScript)) end
 	self.janitor:Add(window.scriptAction.Activated:Connect(viewScript))
 	self.view.openScript = viewScript
 	self.janitor:Add(window.copy.Activated:Connect(function()
@@ -59,6 +59,7 @@ function App.new(parent)
 			window:SetStatus(copied and "Path copied" or tostring(reason), not copied)
 		else
 			window:ShowProperties(true)
+			window:ShowPath()
 			window.path:CaptureFocus()
 			window.path.SelectionStart = 1
 			window.path.CursorPosition = #window.path.Text + 1

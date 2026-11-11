@@ -91,6 +91,9 @@ end
 function methods:FindFirstChild(name)
 	for _, child in self.children do if child.Name == name then return child end end
 end
+function methods:FindFirstChildOfClass(class)
+	for _, child in self.children do if child.ClassName == class then return child end end
+end
 function methods:GetFullName()
 	return self.Parent and self.Parent:GetFullName() .. "." .. self.Name or self.Name
 end
@@ -130,7 +133,10 @@ local target = make("Folder")
 target.Name, target.Parent = "Target", workspace
 target.Archivable = true
 target:SetAttribute("Count", 3)
+local copiedSource, savedSource, savedName
 local env = {
+	setclipboard = function(text) copiedSource = text end,
+	writefile = function(name, text) savedName, savedSource = name, text end,
 	Instance = { new = make }, game = game, workspace = workspace,
 	Enum = rb.Enum, Vector2 = rb.Vector2, Vector3 = rb.Vector3,
 	UDim = rb.UDim, UDim2 = rb.UDim2, Color3 = rb.Color3, CFrame = rb.CFrame,
@@ -152,8 +158,10 @@ local function Import(name)
 end
 local app = Import("App").new(playerGui)
 drain()
-assert(app.window.frame.Size.X.Offset == 420, "Incorrect panel width")
-assert(app.window.frame.Size.Y.Scale == 1 and app.window.frame.Position.X.Scale == 1 and app.window.frame.Position.X.Offset == -420, "Explorer is not attached to the full right edge")
+assert(app.window.frame.Size.X.Offset == 320, "Incorrect panel width")
+assert(app.window.frame.Size.Y.Scale == 1 and app.window.frame.Position.X.Scale == 1 and app.window.frame.Position.X.Offset == -320 and app.window.frame.Position.Y.Offset == 22, "Explorer is not attached to the right edge")
+assert(app.window.explorerBody.BackgroundTransparency == 0.2 and app.window.propertyFrame.BackgroundTransparency == 0.2, "Reference panel transparency missing")
+assert(app.window.search.PlaceholderText == "Search workspace" and app.window.propertySearch.PlaceholderText == "Search properties", "Reference search bars missing")
 assert(app.window.propertyFrame.Visible, "Properties should start open")
 assert(#app.view.pool < 35, "Tree widgets are not viewport bounded")
 app.tree:Toggle(workspace)
@@ -167,11 +175,18 @@ local countInput = app.inspector.scroll:FindFirstChild("Count"):FindFirstChild("
 countInput.Text = "4"
 countInput.FocusLost:Fire()
 assert(target:GetAttribute("Count") == 4, "Attribute editor did not commit")
+local addAttribute = app.inspector.scroll:FindFirstChild("AddAttribute")
+addAttribute:FindFirstChild("Open").Activated:Fire()
+addAttribute:FindFirstChild("AttributeName").Text = "CreatedFromExplorer"
+addAttribute:FindFirstChild("AttributeValue").Text = "hello"
+addAttribute:FindFirstChild("Create").Activated:Fire()
+drain()
+assert(target:GetAttribute("CreatedFromExplorer") == "hello", "Add Attribute failed")
 app.window.widthGrip.InputBegan:Fire({ UserInputType = rb.Enum.UserInputType.MouseButton1, Position = rb.Vector3.new(860, 50, 0) })
 input.InputChanged:Fire({ UserInputType = rb.Enum.UserInputType.MouseMovement, Position = rb.Vector3.new(800, 50, 0) })
-assert(app.window.dockWidth == 480 and app.window.frame.Position.X.Offset == -480, "Dock resize detached it from the right")
+assert(app.window.dockWidth == 380 and app.window.frame.Position.X.Offset == -380, "Dock resize detached it from the right")
 input.InputEnded:Fire({ UserInputType = rb.Enum.UserInputType.MouseButton1 })
-app.window.dockWidth = 420
+app.window.dockWidth = 320
 app.window:Clamp()
 app.window.properties.Activated:Fire()
 assert(not app.window.propertyFrame.Visible, "Properties toggle failed")
@@ -195,13 +210,34 @@ local scriptItem = make("LocalScript")
 scriptItem.Name, scriptItem.Source, scriptItem.Parent = "Example", "return 42", workspace
 app.selection:Set(scriptItem)
 app.window.viewScript.Activated:Fire()
-assert(app.scriptViewer.frame.Visible and app.scriptViewer.code.Text == "return 42", "Source viewer failed")
+assert(app.scriptViewer.frame.Visible and app.scriptViewer.document.text == "return 42", "Source viewer failed")
+assert(app.scriptViewer.title.Text == "Notepad", "Reference Notepad header missing")
+local largeSource = string.rep("local value = 1234567890\n", 20000) .. "return 'FINAL_LINE_MARKER'"
+assert(#largeSource > 200000)
+app.scriptViewer:SetText(largeSource)
+assert(app.scriptViewer.text == largeSource and app.scriptViewer.document.text == largeSource, "Source is still truncated")
+app.scriptViewer.scroll.CanvasPosition = V2.new(0, (#app.scriptViewer.document.starts - 1) * 16)
+assert(string.find(app.scriptViewer.pool[1].raw, "FINAL_LINE_MARKER", 1, true), "Cannot scroll to the final source line")
+assert(#app.scriptViewer.pool < 35, "Source UI grows with document length")
+app.scriptViewer.copy.Activated:Fire()
+app.scriptViewer.save.Activated:Fire()
+assert(copiedSource == largeSource and savedSource == largeSource and savedName == "Explorer_Example.luau", "Full-source copy/save failed")
+local longLine = string.rep("x", 260000) .. "LAST_COLUMN_MARKER"
+app.scriptViewer:SetText(longLine)
+app.scriptViewer.scroll.CanvasPosition = V2.new(260000 * 7, 0)
+assert(string.find(app.scriptViewer.pool[1].raw, "LAST_COLUMN_MARKER", 1, true), "Single-line source is truncated horizontally")
+app.scriptViewer.clear.Activated:Fire()
+assert(app.scriptViewer.text == "" and #app.scriptViewer.document.starts == 1, "Clear failed")
 app.window:Toggle()
 assert(not app.scriptViewer.frame.Visible, "Hiding the dock left the source viewer visible")
 app.window:Toggle()
 app.window.viewScript.Activated:Fire()
 app.scriptViewer.close.Activated:Fire()
 assert(not app.scriptViewer.frame.Visible, "Source viewer close failed")
+app.window.propertyFloat.Activated:Fire()
+assert(app.window.floatingProperties and app.window.propertyFrame.Parent == app.window.gui, "Properties undock failed")
+app.window.propertyFloat.Activated:Fire()
+assert(not app.window.floatingProperties and app.window.propertyFrame.Parent == app.window.frame, "Properties redock failed")
 app.selection:Set(target)
 app.window.search.Text = "Target"
 drain()

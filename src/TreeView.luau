@@ -7,7 +7,7 @@ View.__index = View
 
 function View.new(parent, selectInstance, toggle, context)
 	local self = setmetatable({ rows = {}, pool = {}, janitor = Janitor.new(), selected = nil }, View)
-	self.scroll = UI.scroll(parent, { Name = "InstanceTree", Size = UDim2.fromScale(1, 1) })
+	self.scroll = UI.scroll(parent, { Name = "InstanceTree", Size = UDim2.fromScale(1, 1), ScrollingDirection = Enum.ScrollingDirection.XY, ScrollBarThickness = 10, ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100) })
 	self.selectInstance, self.toggle = selectInstance, toggle
 	self.context = context
 	self.janitor:Add(self.scroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() self:Render() end))
@@ -17,7 +17,10 @@ end
 
 function View:SetRows(rows, expanded)
 	self.rows, self.expanded = rows, expanded
-	self.scroll.CanvasSize = UDim2.fromOffset(0, #rows * Config.RowHeight)
+	local width = self.scroll.AbsoluteSize.X - 10
+	for _, row in rows do width = math.max(width, row.depth * 18 + #row.instance.Name * 7 + 62) end
+	self.contentWidth = width
+	self.scroll.CanvasSize = UDim2.fromOffset(width, #rows * Config.RowHeight)
 	self:Render()
 end
 
@@ -43,8 +46,8 @@ function View:Render()
 	for slot = 1, count do
 		local widget = self.pool[slot]
 		if not widget then
-			local button = UI.button(self.scroll, "", { Name = "Row", Size = UDim2.new(1, -5, 0, height), AutoButtonColor = false })
-			local arrow = UI.button(button, "", { Size = UDim2.fromOffset(14, height), BackgroundTransparency = 1, TextSize = 10 })
+			local button = UI.button(self.scroll, "", { Name = "Row", Size = UDim2.new(1, -10, 0, height), AutoButtonColor = false, BackgroundTransparency = 1 })
+			local arrow = UI.button(button, "", { Size = UDim2.fromOffset(14, height), BackgroundTransparency = 1, TextSize = 22, TextColor3 = Color3.fromRGB(182, 182, 182) })
 			local label = UI.text(button, "", { Size = UDim2.new(1, -30, 1, 0) })
 			widget = { button = button, arrow = arrow, label = label, icon = Icons.new(button) }
 			self.pool[slot] = widget
@@ -67,10 +70,10 @@ function View:Render()
 				end
 			end))
 			self.janitor:Add(button.MouseEnter:Connect(function()
-				if widget.row and widget.row.instance ~= self.selected then button.BackgroundColor3 = Config.Colors.Input end
+				if widget.row and widget.row.instance ~= self.selected then button.BackgroundColor3 = Config.Colors.Input; button.BackgroundTransparency = 0.6 end
 			end))
 			self.janitor:Add(button.MouseLeave:Connect(function()
-				if widget.row then button.BackgroundColor3 = widget.row.instance == self.selected and Config.Colors.Selected or Config.Colors.Panel end
+				if widget.row then button.BackgroundColor3 = Config.Colors.Selected; button.BackgroundTransparency = widget.row.instance == self.selected and 0 or 1 end
 			end))
 			self.janitor:Add(arrow.Activated:Connect(function()
 				if widget.row then self.toggle(widget.row.instance) end
@@ -81,11 +84,14 @@ function View:Render()
 		widget.row = row
 		widget.button.Visible = row ~= nil
 		if row then
-			local indent = math.min(row.depth, 18) * 14 + 2
+			local indent = row.depth * 18 + 4
 			widget.button.Position = UDim2.fromOffset(0, (index - 1) * height)
-			widget.button.BackgroundColor3 = row.instance == self.selected and Config.Colors.Selected or Config.Colors.Panel
+			widget.button.Size = UDim2.fromOffset(math.max(self.contentWidth or 0, self.scroll.AbsoluteSize.X - 10), height)
+			widget.button.BackgroundColor3 = Config.Colors.Selected
+			widget.button.BackgroundTransparency = row.instance == self.selected and 0 or 1
 			widget.arrow.Position = UDim2.fromOffset(indent, 0)
-			widget.arrow.Text = row.hasChildren and (self.expanded[row.instance] and "▼" or "▶") or ""
+			widget.arrow.Text = row.hasChildren and "›" or ""
+			widget.arrow.Rotation = self.expanded[row.instance] and 90 or 0
 			widget.arrow.Visible = row.hasChildren
 			widget.icon.root.Position = UDim2.fromOffset(indent + 15, math.floor((height - 16) / 2))
 			if widget.iconClass ~= row.instance.ClassName then

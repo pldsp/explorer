@@ -2,6 +2,7 @@ local Metadata = require(script.Parent.ApiMetadata)
 local Fallback = require(script.Parent.PropertySchema)
 local Catalog = {}
 local cache = {}
+local order = { Data = 1, Permissions = 2, Behavior = 3, Appearance = 4, Transform = 5, Pivot = 6, Collision = 7, Part = 8 }
 
 function Catalog.Get(item)
 	local className = item.ClassName
@@ -29,7 +30,11 @@ function Catalog.Get(item)
 		end
 	end
 	table.sort(result, function(a, b)
-		if a[2] ~= b[2] then return a[2] < b[2] end
+		if a[2] ~= b[2] then
+			local left, right = order[a[2]] or 100, order[b[2]] or 100
+			if left ~= right then return left < right end
+			return a[2] < b[2]
+		end
 		return a[1] < b[1]
 	end)
 	cache[className] = result
