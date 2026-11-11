@@ -1,0 +1,21 @@
+return {
+	ToggleKey = Enum.KeyCode.RightShift,
+	RowHeight = 14,
+	Font = Enum.Font.SourceSans,
+	TextSize = 11,
+	SearchLimit = 1500,
+	SearchBatch = 300,
+	SearchDebounce = 0.25,
+	WindowSize = Vector2.new(256, 500),
+	Colors = {
+		Background = Color3.fromRGB(45, 45, 45),
+		Panel = Color3.fromRGB(45, 45, 45),
+		Input = Color3.fromRGB(38, 38, 38),
+		Border = Color3.fromRGB(67, 67, 67),
+		Text = Color3.fromRGB(238, 238, 238),
+		Muted = Color3.fromRGB(180, 180, 180),
+		Accent = Color3.fromRGB(117, 189, 230),
+		Selected = Color3.fromRGB(11, 90, 175),
+		Error = Color3.fromRGB(255, 133, 133),
+	},
+}

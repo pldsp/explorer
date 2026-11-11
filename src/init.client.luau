@@ -1,0 +1,5 @@
+local App = require(script.App)
+local app = App.new(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"))
+script.Destroying:Connect(function()
+	app:Destroy()
+end)

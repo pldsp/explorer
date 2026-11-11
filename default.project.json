@@ -1,0 +1,11 @@
+{
+  "name": "ExplorerPlus",
+  "tree": {
+    "$className": "DataModel",
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "ExplorerPlus": { "$path": "src" }
+      }
+    }
+  }
+}
