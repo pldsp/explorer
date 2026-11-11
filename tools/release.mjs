@@ -44,7 +44,9 @@ if (revision) {
   if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error('Expected a full module commit SHA');
   const entries = manifest.map(([name, size, sum]) => `{${JSON.stringify(name)},${size},${sum}}`).join(',');
   const template = await fs.readFile('executor/loader.template.luau', 'utf8');
-  const source = template.replace('__REVISION__', revision).replace('__MANIFEST__', `{${entries}}`);
+  const intro = await fs.readFile('executor/intro.luau', 'utf8');
+  const errors = await fs.readFile('src/Errors.luau', 'utf8');
+  const source = template.replace('__REVISION__', revision).replace('__MANIFEST__', `{${entries}}`).replace('__ERRORS__', () => `(function()\n${errors}\nend)()`).replace('__INTRO__', () => `(function()\n${intro}\nend)()`);
   await fs.writeFile('loader.luau', compress(source));
   await fs.writeFile('dist/release.json', JSON.stringify({ repository: 'pldsp/explorer', modulesCommit: revision, modules: manifest.length, level: 3 }));
 }

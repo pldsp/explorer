@@ -5,13 +5,15 @@ local Reader = require(script.Parent.SourceReader)
 local Document = require(script.Parent.SourceDocument)
 local Syntax = require(script.Parent.Syntax)
 local Drag = require(script.Parent.Drag)
+local Motion = require(script.Parent.Motion)
 local Viewer = {}
 Viewer.__index = Viewer
 local lineHeight, charWidth = 16, 7
 
 function Viewer.new(parent, dock)
-	local self = setmetatable({ janitor = Janitor.new(), reader = Reader.new(), dock = dock, dead = false, text = "", request = 0, textVersion = 0, pool = {}, document = Document.new("") }, Viewer)
-	self.frame = UI.frame(parent, { Name = "ScriptViewer", Position = UDim2.new(0.5, -300, 0.5, -210), Size = UDim2.fromOffset(600, 420), Visible = false, ClipsDescendants = true, ZIndex = 5, BackgroundTransparency = Config.PanelTransparency, BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(32, 32, 32) })
+	local self = setmetatable({ janitor = Janitor.new(), motion = Motion.new(), reader = Reader.new(), dock = dock, dead = false, shown = false, text = "", request = 0, textVersion = 0, pool = {}, document = Document.new("") }, Viewer)
+	self.frame = UI.group(parent, { Name = "ScriptViewer", GroupTransparency = 1, Position = UDim2.new(0.5, -300, 0.5, -210), Size = UDim2.fromOffset(600, 420), Visible = false, ClipsDescendants = true, ZIndex = 5, BackgroundTransparency = Config.PanelTransparency, BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(32, 32, 32) })
+	self.scale = UI.new("UIScale", { Scale = 1 }, self.frame)
 	local header = UI.frame(self.frame, { Name = "SourceTab", Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = Color3.fromRGB(51, 51, 51), Active = true })
 	self.title = UI.text(header, "Notepad", { Position = UDim2.fromOffset(5, 0), Size = UDim2.new(1, -48, 1, 0) })
 	self.minimize = UI.button(header, "−", { Position = UDim2.new(1, -34, 0, 0), Size = UDim2.fromOffset(16, 20), BackgroundTransparency = 1 })
@@ -21,13 +23,15 @@ function Viewer.new(parent, dock)
 	self.save = UI.button(toolbar, "Save to File", { Position = UDim2.fromScale(1 / 3, 0), Size = UDim2.new(1 / 3, 0, 1, 0), BackgroundTransparency = 1 })
 	self.reload = UI.button(toolbar, "Reload Source", { Position = UDim2.fromScale(2 / 3, 0), Size = UDim2.new(1 / 3, 0, 1, 0), BackgroundTransparency = 1 })
 	self.path = UI.text(self.frame, "", { Visible = false })
-	local body = UI.frame(self.frame, { Name = "CodeBody", Position = UDim2.fromOffset(1, 42), Size = UDim2.new(1, -2, 1, -64), BackgroundTransparency = 1, ClipsDescendants = true })
+	local body = UI.group(self.frame, { Name = "CodeBody", Position = UDim2.fromOffset(1, 42), Size = UDim2.new(1, -2, 1, -64), BackgroundTransparency = 1, ClipsDescendants = true })
+	self.body = body
 	self.gutter = UI.frame(body, { Name = "LineNumbers", Size = UDim2.new(0, 48, 1, -8), BackgroundTransparency = 1, ClipsDescendants = true })
 	self.scroll = UI.scroll(body, { Name = "SourceViewport", Position = UDim2.fromOffset(54, 0), Size = UDim2.new(1, -54, 1, 0), ScrollingDirection = Enum.ScrollingDirection.XY, ScrollBarThickness = 10, ScrollBarImageColor3 = Color3.fromRGB(95, 95, 95) })
 	self.status = UI.text(self.frame, "", { Position = UDim2.new(0, 6, 1, -21), Size = UDim2.new(1, -90, 0, 20), TextSize = 11, TextColor3 = Config.Colors.Muted })
 	self.clear = UI.button(self.frame, "Clear", { Position = UDim2.new(1, -80, 1, -21), Size = UDim2.fromOffset(62, 20), BackgroundTransparency = 1 })
 	local grip = UI.button(self.frame, "◢", { Position = UDim2.new(1, -14, 1, -14), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1 })
 	Drag.Attach(self.frame, header, grip, self.janitor, parent)
+	for _, button in { self.minimize, self.close, self.copy, self.save, self.reload, self.clear } do self.motion:Button(button, self.janitor) end
 	self.janitor:Add(self.close.Activated:Connect(function() self:Hide() end))
 	self.janitor:Add(self.minimize.Activated:Connect(function() self:Hide() end))
 	self.janitor:Add(self.reload.Activated:Connect(function() if self.item then self:Open(self.item, true) end end))
@@ -109,9 +113,11 @@ function Viewer:SetText(text)
 	local document = Document.new(text, function() return self.dead or version ~= self.textVersion end)
 	if not document or self.dead or version ~= self.textVersion then return false end
 	self.document = document
+	self.body.GroupTransparency = 1
 	self.scroll.CanvasSize = UDim2.fromOffset(document.longest * charWidth + 20, #document.starts * lineHeight + 12)
 	self.scroll.CanvasPosition = Vector2.zero
 	self:Render()
+	self.motion:To(self.body, { GroupTransparency = 0 }, 0.18)
 	return true
 end
 
@@ -119,7 +125,11 @@ function Viewer:Open(item, refresh)
 	self.request += 1
 	local request = self.request
 	self.item = item
+	if not self.shown then self.scale.Scale, self.frame.GroupTransparency = 0.96, 1 end
+	self.shown = true
 	self.frame.Visible = true
+	self.motion:To(self.frame, { GroupTransparency = 0 }, 0.28)
+	self.motion:To(self.scale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back)
 	self.path.Text = item and item:GetFullName() or ""
 	self.status.Text = "Reading script..."
 	self:SetText("")
@@ -134,7 +144,10 @@ function Viewer:Open(item, refresh)
 end
 
 function Viewer:Hide()
-	self.frame.Visible = false
+	if not self.shown then return end
+	self.shown = false
+	self.motion:To(self.frame, { GroupTransparency = 1 }, 0.18, nil, function() self.frame.Visible = false end)
+	self.motion:To(self.scale, { Scale = 0.97 }, 0.2)
 	self.request += 1
 	self.textVersion += 1
 	self.reader:Cancel()
@@ -144,6 +157,7 @@ function Viewer:Destroy()
 	self.dead = true
 	self.textVersion += 1
 	self.reader:Destroy()
+	self.motion:Destroy()
 	self.janitor:Destroy()
 	self.frame:Destroy()
 	table.clear(self.pool)

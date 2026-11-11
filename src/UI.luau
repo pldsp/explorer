@@ -15,6 +15,12 @@ function UI.frame(parent, props)
 	return UI.new("Frame", defaults, parent)
 end
 
+function UI.group(parent, props)
+	local defaults = { BorderSizePixel = 0, BackgroundColor3 = Colors.Panel, GroupTransparency = 0 }
+	for key, value in props or {} do defaults[key] = value end
+	return UI.new("CanvasGroup", defaults, parent)
+end
+
 function UI.text(parent, text, props)
 	local defaults = {
 		BackgroundTransparency = 1, BorderSizePixel = 0,

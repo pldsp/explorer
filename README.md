@@ -8,9 +8,39 @@ A modular Roblox client instance explorer matching the supplied Dex++ screenshot
 loadstring(game:HttpGet("https://raw.githubusercontent.com/pldsp/explorer/main/loader.luau"))()
 ```
 
-Requires a client executor providing `loadstring` and `game:HttpGet`. The loader downloads 20 separately minified modules from one pinned release commit, validates their byte lengths and Adler-32 checksums, and caches module exports. Downloads use up to four workers, three attempts per module and a 45-second startup wait limit. Failed downloads leave an existing explorer running. Executing again replaces the old explorer after downloads and compilation succeed.
+Requires a client executor providing `loadstring` and `game:HttpGet`. The loader downloads 23 separately minified modules from one pinned release commit, validates their byte lengths and Adler-32 checksums, and caches module exports. Downloads use up to four workers, three attempts per module and a 45-second startup wait limit. Executing again brings the existing explorer into view and shows **E001 — Already running**, without downloading modules or replacing it. A simultaneous launch shows **E002 — Already loading**. Close the current Explorer before loading an updated release.
 
 The GUI uses `gethui()` when available, otherwise a writable CoreGui or PlayerGui. Clipboard copying uses `setclipboard`/`toclipboard` when available, with a selectable path field as fallback. No executor-specific identity changes are required by this project. Compatibility depends on the executor's Roblox API support.
+
+## Loading and animation
+
+A Dex++-inspired startup card fades and scales into view over a temporary blur. It shows real download counts, module names, compilation, interface setup and completion, with a smooth progress bar and animated dots. It remains visible for at least 0.9 seconds so quick starts still show a complete transition. Startup failures after GUI creation turn the card into a dismissible error screen. The full error also appears in executor output. Retrying closes any old failed intro first; blur, repeating tweens and connections are cleaned on dismissal.
+
+Explorer slides in from the right; hide/restore fades and slides it. Properties expands and collapses smoothly. Notepad opens with a subtle scale and fade, and its code content fades in after indexing. Context menus animate in/out; title and action buttons have hover/press feedback; disclosure arrows rotate. Blue or red notification cards display error codes. All motion uses TweenService rather than permanent per-frame loops. Superseded tweens are cancelled, and unload cancels active animations.
+
+The intro source remains in `executor/intro.luau`. The build embeds that small bootstrap UI and error definitions into the loader so a progress/error screen can appear before any remote module is available. The utility modules remain separate.
+
+## Error codes
+
+| Code | Meaning |
+| --- | --- |
+| E001 | Explorer is already running; the current window is revealed. |
+| E002 | Another startup is in progress. |
+| E003 | The executor does not provide loadstring. |
+| E004 | Explorer must run on the client. |
+| E005 | No writable GUI container was found. |
+| E101 | A module download failed after three attempts. |
+| E102 | Download length/checksum does not match the release. |
+| E103 | Downloads exceeded the 45-second startup wait. |
+| E104 | A module failed to compile. |
+| E105 | A module factory is invalid. |
+| E106 | A module dependency cycle was detected. |
+| E107 | A requested module is missing. |
+| E108 | A module returned no export. |
+| E109 | Interface initialization or an unexpected startup step failed. |
+| E201 | Native decompilation is unavailable and Source is unreadable. |
+| E202 | Source reading/decompilation failed or returned nothing. |
+| E203 | The decompiler timed out. |
 
 ## Controls
 
@@ -33,7 +63,7 @@ The viewer keeps the entire string returned by the source property or decompiler
 
 ## Modules and performance
 
-`dist/modules/` contains 20 separate comment-free, level-3 minified modules. ApiMetadata and PropertyCatalog provide the engine property catalog; IconAtlas and Icons provide class icons; SourceReader, SourceDocument, Syntax, and ScriptViewer provide complete source reading/rendering; Drag handles floating-window input. The loader does not bundle modules into one large script. DexPlusPlus attribution and its MIT notice are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The local reference checkout is excluded from releases.
+`dist/modules/` contains 23 separate comment-free, level-3 minified modules. ApiMetadata and PropertyCatalog provide the engine property catalog; IconAtlas and Icons provide class icons; SourceReader, SourceDocument, Syntax, and ScriptViewer provide complete source reading/rendering; Drag handles floating-window input; Motion, Notifications and Errors handle transitions and error presentation. The loader does not bundle utility modules into one large script. DexPlusPlus attribution and its MIT notice are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The local reference checkout is excluded from releases.
 
 TreeView recycles only viewport rows. TreeModel watches visible hierarchy nodes, coalesces structural events, and yields during cancellable searches. Search output is capped at 1,500 matches. There is no per-frame hierarchy scan. Closing disconnects listeners and destroys owned instances. Very large expanded branches still require flattened hierarchy rows and event subscriptions; collapse unused branches to reduce that cost.
 
@@ -52,7 +82,7 @@ lune run tools/check-document.luau
 lune run tools/check-app.luau
 ```
 
-Publish modules first, then run `node tools/release.mjs <full-modules-commit-sha>` to generate the pinned, minified `loader.luau`. Commit that loader. Source and generated modules are compiled with Lune; conversion, tree behavior, source/decompiler handling, and minified app/loader lifecycle are exercised with test harnesses. Mock engine checks do not replace a visual Roblox/executor playtest.
+Publish modules first, then run `node tools/release.mjs <full-modules-commit-sha>` to generate the pinned, minified `loader.luau`. Commit that loader. Source and generated modules are compiled with Lune; conversion, tree behavior, source/decompiler handling, large-source rendering, interrupted animation cancellation, intro cleanup, duplicate launches, network/checksum/compile/init/time-out errors and retry recovery are exercised with test harnesses. Mock engine checks do not replace a visual Roblox/executor playtest.
 
 `node tools/update-metadata.mjs` refreshes bundled metadata from Roblox's official Studio deployment API dump. `node tools/import-dex-icons.mjs` regenerates icon mappings and notices from the local DexPlusPlus reference.
 

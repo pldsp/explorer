@@ -1,4 +1,5 @@
 local Config = require(script.Parent.Config)
+local Errors = require(script.Parent.Errors)
 local Reader = {}
 Reader.__index = Reader
 
@@ -25,7 +26,7 @@ function Reader:Read(item, callback, refresh)
 		return
 	end
 	task.delay(Config.DecompilerTimeout, function()
-		finish(nil, "The executor's decompiler timed out. Retry when it is available.")
+		finish(nil, Errors.Format("E203"))
 	end)
 	task.spawn(function()
 		local readable, source = pcall(function() return item.Source end)
@@ -34,17 +35,17 @@ function Reader:Read(item, callback, refresh)
 			local environment = type(getgenv) == "function" and getgenv() or _G
 			local decompiler = decompile or environment.decompile
 			if type(decompiler) ~= "function" then
-				finish(nil, "This executor has no decompile function and the script's Source is unreadable.")
+				finish(nil, Errors.Format("E201"))
 				return
 			end
 			readable, source = pcall(decompiler, item)
 			method = "Executor decompiler"
 		end
 		if not readable then
-			finish(nil, "Unable to read this script: " .. tostring(source) .. ". Server-only source may be unavailable to the client.")
+			finish(nil, Errors.Format("E202", tostring(source) .. ". Server-only source may be unavailable to the client."))
 			return
 		end
-		if type(source) ~= "string" or source == "" then finish(nil, "The decompiler returned no source for this script"); return end
+		if type(source) ~= "string" or source == "" then finish(nil, Errors.Format("E202", "The decompiler returned no source for this script")); return end
 		if not finished and not self.dead and serial == self.serial then self.cache[item] = source end
 		finish(source, method)
 	end)

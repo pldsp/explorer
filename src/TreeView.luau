@@ -2,11 +2,12 @@ local Config = require(script.Parent.Config)
 local UI = require(script.Parent.UI)
 local Janitor = require(script.Parent.Janitor)
 local Icons = require(script.Parent.Icons)
+local Motion = require(script.Parent.Motion)
 local View = {}
 View.__index = View
 
 function View.new(parent, selectInstance, toggle, context)
-	local self = setmetatable({ rows = {}, pool = {}, janitor = Janitor.new(), selected = nil }, View)
+	local self = setmetatable({ rows = {}, pool = {}, janitor = Janitor.new(), motion = Motion.new(), selected = nil }, View)
 	self.scroll = UI.scroll(parent, { Name = "InstanceTree", Size = UDim2.fromScale(1, 1), ScrollingDirection = Enum.ScrollingDirection.XY, ScrollBarThickness = 10, ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100) })
 	self.selectInstance, self.toggle = selectInstance, toggle
 	self.context = context
@@ -70,10 +71,10 @@ function View:Render()
 				end
 			end))
 			self.janitor:Add(button.MouseEnter:Connect(function()
-				if widget.row and widget.row.instance ~= self.selected then button.BackgroundColor3 = Config.Colors.Input; button.BackgroundTransparency = 0.6 end
+				if widget.row and widget.row.instance ~= self.selected then button.BackgroundColor3 = Config.Colors.Input; self.motion:To(button, { BackgroundTransparency = 0.6 }, 0.12) end
 			end))
 			self.janitor:Add(button.MouseLeave:Connect(function()
-				if widget.row then button.BackgroundColor3 = Config.Colors.Selected; button.BackgroundTransparency = widget.row.instance == self.selected and 0 or 1 end
+				if widget.row then button.BackgroundColor3 = Config.Colors.Selected; self.motion:To(button, { BackgroundTransparency = widget.row.instance == self.selected and 0 or 1 }, 0.18) end
 			end))
 			self.janitor:Add(arrow.Activated:Connect(function()
 				if widget.row then self.toggle(widget.row.instance) end
@@ -84,6 +85,11 @@ function View:Render()
 		widget.row = row
 		widget.button.Visible = row ~= nil
 		if row then
+			local selected = row.instance == self.selected
+			if widget.boundInstance ~= row.instance or widget.wasSelected ~= selected then
+				self.motion:Cancel(widget.button)
+				widget.boundInstance, widget.wasSelected = row.instance, selected
+			end
 			local indent = row.depth * 18 + 4
 			widget.button.Position = UDim2.fromOffset(0, (index - 1) * height)
 			widget.button.Size = UDim2.fromOffset(math.max(self.contentWidth or 0, self.scroll.AbsoluteSize.X - 10), height)
@@ -91,7 +97,11 @@ function View:Render()
 			widget.button.BackgroundTransparency = row.instance == self.selected and 0 or 1
 			widget.arrow.Position = UDim2.fromOffset(indent, 0)
 			widget.arrow.Text = row.hasChildren and "›" or ""
-			widget.arrow.Rotation = self.expanded[row.instance] and 90 or 0
+			local rotation = self.expanded[row.instance] and 90 or 0
+			if widget.arrowTarget ~= rotation then
+				widget.arrowTarget = rotation
+				self.motion:To(widget.arrow, { Rotation = rotation }, 0.17)
+			end
 			widget.arrow.Visible = row.hasChildren
 			widget.icon.root.Position = UDim2.fromOffset(indent + 15, math.floor((height - 16) / 2))
 			if widget.iconClass ~= row.instance.ClassName then
@@ -107,6 +117,7 @@ function View:Render()
 end
 
 function View:Destroy()
+	self.motion:Destroy()
 	self.janitor:Destroy()
 	self.scroll:Destroy()
 	table.clear(self.pool)

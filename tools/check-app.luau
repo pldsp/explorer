@@ -32,7 +32,7 @@ local function drain()
 		assert(count < 100, "Unbounded event scheduling")
 	end
 end
-local events = { "Destroying", "AncestryChanged", "ChildAdded", "ChildRemoved", "AttributeChanged", "Activated", "MouseButton2Click", "MouseEnter", "MouseLeave", "InputBegan", "InputEnded", "InputChanged", "FocusLost" }
+local events = { "Changed", "Destroying", "AncestryChanged", "ChildAdded", "ChildRemoved", "AttributeChanged", "Activated", "MouseButton2Click", "MouseEnter", "MouseLeave", "InputBegan", "InputEnded", "InputChanged", "FocusLost" }
 local methods, meta = {}, {}
 local function make(class)
 	local props = { Name = class, ClassName = class, Parent = nil, Size = U2.new(), Position = U2.new(), CanvasPosition = V2.zero, Visible = true, Text = "", _type = "Instance" }
@@ -68,6 +68,7 @@ function meta:__newindex(key, value)
 		self.AncestryChanged:Fire(self, value)
 	end
 	if self.changed[key] then self.changed[key]:Fire() end
+	self.Changed:Fire(key == "Value" and value or key)
 end
 function methods:GetChildren() return table.clone(self.children) end
 function methods:GetPropertyChangedSignal(name)
@@ -81,7 +82,7 @@ function methods:IsDescendantOf(root)
 end
 function methods:IsA(class)
 	if class == "Instance" or class == self.ClassName then return true end
-	if class == "GuiObject" then return table.find({ "Frame", "TextLabel", "TextButton", "TextBox", "ScrollingFrame" }, self.ClassName) ~= nil end
+	if class == "GuiObject" then return table.find({ "CanvasGroup", "Frame", "TextLabel", "TextButton", "TextBox", "ScrollingFrame" }, self.ClassName) ~= nil end
 	if class == "GuiBase2d" then return self:IsA("GuiObject") or self.ClassName == "ScreenGui" end
 	if class == "LayerCollector" then return self.ClassName == "ScreenGui" end
 	if class == "BasePart" then return self.ClassName == "Part" end
@@ -127,20 +128,43 @@ local input = make("UserInputService")
 input.GetFocusedTextBox = function() return nil end
 input.GetMouseLocation = function() return V2.new(500, 400) end
 input.IsKeyDown = function() return false end
-local services = { UserInputService = input, GuiService = { GetGuiInset = function() return V2.zero end } }
+local manualTweens, tweens = false, {}
+local tweenService = {}
+function tweenService:Create(target, info, properties)
+	local tween = { Completed = signal(), state = "created", info = info }
+	function tween:Complete()
+		if self.state == "cancelled" or self.state == "completed" then return end
+		self.state = "completed"
+		for key, value in properties do target[key] = value end
+		self.Completed:Fire(rb.Enum.PlaybackState.Completed)
+	end
+	function tween:Play()
+		self.state = "playing"
+		if not manualTweens and info.RepeatCount ~= -1 then self:Complete() end
+	end
+	function tween:Cancel()
+		self.state = "cancelled"
+		self.Completed:Fire(rb.Enum.PlaybackState.Cancelled)
+	end
+	table.insert(tweens, tween)
+	return tween
+end
+local services = { TweenService = tweenService, Lighting = make("Lighting"), UserInputService = input, GuiService = { GetGuiInset = function() return V2.zero end } }
 game.GetService = function(_, name) return assert(services[name], name) end
 local target = make("Folder")
 target.Name, target.Parent = "Target", workspace
 target.Archivable = true
 target:SetAttribute("Count", 3)
-local copiedSource, savedSource, savedName
+local copiedSource, savedSource, savedName, injectInitFailure
 local env = {
 	setclipboard = function(text) copiedSource = text end,
 	writefile = function(name, text) savedName, savedSource = name, text end,
-	Instance = { new = make }, game = game, workspace = workspace,
+	Instance = { new = function(class) if injectInitFailure and class == "Highlight" then error("Injected initialization failure") end; return make(class) end }, game = game, workspace = workspace,
 	Enum = rb.Enum, Vector2 = rb.Vector2, Vector3 = rb.Vector3,
 	UDim = rb.UDim, UDim2 = rb.UDim2, Color3 = rb.Color3, CFrame = rb.CFrame,
 	BrickColor = rb.BrickColor, Rect = rb.Rect, NumberRange = rb.NumberRange,
+	ColorSequence = rb.ColorSequence, ColorSequenceKeypoint = rb.ColorSequenceKeypoint,
+	TweenInfo = { new = function(duration, style, direction, repeatCount) return { Time = duration, Style = style, Direction = direction, RepeatCount = repeatCount } end },
 	typeof = function(value) return type(value) == "table" and value._type or typeof(value) end,
 	task = {
 		defer = function(callback) table.insert(deferred, callback) end,
@@ -197,6 +221,20 @@ app.window.hide.Activated:Fire()
 assert(not app.window.frame.Visible and not app.window.menu.Visible and app.window.restore.Visible, "Hide failed")
 app.window.restore.Activated:Fire()
 assert(app.window.frame.Visible and app.window.propertyFrame.Visible, "Restore failed")
+manualTweens = true
+app.window:SetShown(false)
+local hiding = app.window.motion.active[app.window.frame].tween
+app.window:SetShown(true)
+assert(hiding.state == "cancelled", "Restore did not cancel the closing animation")
+for _, tween in table.clone(tweens) do if tween.state == "playing" and tween.info.RepeatCount ~= -1 then tween:Complete() end end
+assert(app.window.shown and app.window.frame.Visible and app.window.frame.GroupTransparency == 0, "A stale hide callback hid the restored dock")
+app.window:ShowProperties(false)
+local closingProperties = app.window.motion.active[app.window.propertyAmount].tween
+app.window:ShowProperties(true)
+assert(closingProperties.state == "cancelled", "Property transition was not interrupted cleanly")
+for _, tween in table.clone(tweens) do if tween.state == "playing" and tween.info.RepeatCount ~= -1 then tween:Complete() end end
+assert(app.window.propertyFrame.Visible and app.window.propertyAmount.Value == 1, "Interrupted property animation hid the panel")
+manualTweens = false
 app.window.propertySearch.Text = "Name"
 assert(app.inspector.query == "name", "Property filter failed")
 app.window.propertySearch.Text = ""
@@ -256,10 +294,14 @@ app:Destroy()
 print("Minified app: right dock, default properties, property filtering, inherited metadata, 313 icons, source viewer, selection, search, reveal, refresh and listener cleanup passed (mock engine).")
 
 if fs.isFile("loader.luau") then
-	local globals, hits, corrupt = {}, {}, false
+	local globals, hits, corrupt, networkFailure = {}, {}, false, false
+	local compileFailure = false
+	local warnings = {}
+	env.warn = function(message) table.insert(warnings, message) end
 	env.getgenv = function() return globals end
 	env.gethui = function() return playerGui end
 	env.loadstring = function(source)
+		if compileFailure and source == fs.readFile("dist/modules/Config.luau") then return nil, "Injected compile failure" end
 		local ok, chunk = pcall(luau.load, source, { environment = env })
 		if ok then return chunk end
 		return nil, tostring(chunk)
@@ -269,6 +311,7 @@ if fs.isFile("loader.luau") then
 	game.HttpGet = function(_, url)
 		local name = assert(string.match(url, "/([^/]+)%.luau$"))
 		hits[name] = (hits[name] or 0) + 1
+		if networkFailure then error("Network unavailable") end
 		if corrupt then return "<html>Service unavailable</html>" end
 		if name == "Config" and hits[name] == 1 then error("Transient connection error") end
 		return fs.readFile("dist/modules/" .. name .. ".luau")
@@ -277,18 +320,50 @@ if fs.isFile("loader.luau") then
 	local first = env.loadstring(loader)()
 	drain()
 	assert(globals.ExplorerPlus == first and globals.ExplorerPlusLoading == nil and hits.Config == 2, "Loader retry/startup failed")
+	assert(globals.ExplorerPlusIntro == nil and #services.Lighting:GetChildren() == 0, "Successful intro did not remove its GUI/blur")
+	local beforeHits = hits.Config
+	first.window:SetShown(false)
 	local second = env.loadstring(loader)()
 	drain()
-	assert(first.dead and not second.dead and globals.ExplorerPlus == second, "Reexecution did not replace the old app")
-	corrupt = true
-	local ok = pcall(env.loadstring(loader))
-	assert(not ok and globals.ExplorerPlusLoading == nil and not second.dead, "Failed download damaged the running app or left the startup lock")
-	corrupt = false
-	globals.ExplorerPlusLoading = true
-	assert(not pcall(env.loadstring(loader)), "Concurrent launch was not rejected")
-	globals.ExplorerPlusLoading = nil
+	assert(first == second and not first.dead and hits.Config == beforeHits and second.window.shown and string.find(warnings[#warnings], "E001", 1, true), "Duplicate launch did not reuse the running app with E001")
 	second:Destroy()
 	drain()
-	assert(listeners == 0, "Loader reexecution leaked listeners")
-	print("Minified loader retry, checksum rejection, dependency loading, singleton replacement, concurrent-launch guard and failure recovery passed (mock HTTP/engine).")
+	corrupt = true
+	local ok, reason = pcall(env.loadstring(loader))
+	assert(not ok and string.find(reason, "E102", 1, true) and globals.ExplorerPlusLoading == nil, "Checksum failure did not report E102 or release the startup lock")
+	assert(globals.ExplorerPlusIntro and globals.ExplorerPlusIntro.failed, "Download failure did not display the error card")
+	corrupt = false
+	networkFailure = true
+	ok, reason = pcall(env.loadstring(loader))
+	assert(not ok and string.find(reason, "E101", 1, true), "Network failure did not report E101")
+	networkFailure = false
+	compileFailure = true
+	ok, reason = pcall(env.loadstring(loader))
+	assert(not ok and string.find(reason, "E104", 1, true), "Compilation failure did not report E104")
+	compileFailure = false
+	injectInitFailure = true
+	ok, reason = pcall(env.loadstring(loader))
+	assert(not ok and string.find(reason, "E109", 1, true), "App initialization failure did not report E109")
+	injectInitFailure = false
+	local spawn = env.task.spawn
+	env.task.spawn = function() end
+	local clock = 0
+	env.os = { clock = function() clock += 60; return clock end }
+	ok, reason = pcall(env.loadstring(loader))
+	assert(not ok and string.find(reason, "E103", 1, true), "Download timeout did not report E103")
+	env.task.spawn, env.os = spawn, nil
+	local recovered = env.loadstring(loader)()
+	drain()
+	assert(not recovered.dead and globals.ExplorerPlusLoading == nil and globals.ExplorerPlusIntro == nil, "Retry after an error failed")
+	recovered:Destroy()
+	drain()
+	globals.ExplorerPlusLoading = true
+	local startupNotice
+	globals.ExplorerPlusStartup = { Notice = function(_, message) startupNotice = message end }
+	ok, reason = pcall(env.loadstring(loader))
+	assert(ok and reason == nil and string.find(warnings[#warnings], "E002", 1, true) and string.find(startupNotice, "E002", 1, true), "Concurrent launch did not report E002 in the intro")
+	globals.ExplorerPlusLoading, globals.ExplorerPlusStartup = nil, nil
+	drain()
+	assert(listeners == 0 and #services.Lighting:GetChildren() == 0, "Loader or animation cleanup leaked listeners/blur")
+	print("Minified loader: intro/blur cleanup; E001/E002 duplicates; E101 network, E102 bytes, E103 timeout, E104 compile, E109 initialization errors; and retry passed (mock HTTP/engine).")
 end

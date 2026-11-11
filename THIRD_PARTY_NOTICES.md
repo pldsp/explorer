@@ -1,6 +1,6 @@
 # Third-party notices
 
-The class icon mapping and atlas reference in src/IconAtlas.luau are adapted from DexPlusPlus, modules/Lib.lua (NewDark map). The interface proportions, Notepad presentation, syntax palette and viewport-based code rendering are informed by DexPlusPlus modules/Lib.lua (CodeFrame) and modules/ScriptViewer.lua. The source document and rendering modules are maintained separately in this project.
+The class icon mapping and atlas reference in src/IconAtlas.luau are adapted from DexPlusPlus, modules/Lib.lua (NewDark map). The interface proportions, Notepad presentation, syntax palette and viewport-based code rendering are informed by DexPlusPlus modules/Lib.lua (CodeFrame) and modules/ScriptViewer.lua. The startup progress presentation is inspired by the intro in main.lua. The source document, rendering and animated intro modules are maintained separately in this project.
 
 Upstream: https://github.com/AZYsGithub/DexPlusPlus
 

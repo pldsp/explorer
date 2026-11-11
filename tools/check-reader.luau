@@ -9,7 +9,11 @@ local factory = luau.load(fs.readFile("dist/modules/SourceReader.luau"), { envir
 		delay = function(_, callback) table.insert(timers, callback) end,
 	},
 } })()
-local Reader = factory(function(name) assert(name == "Config"); return config end)
+local Reader = factory(function(name)
+	if name == "Config" then return config end
+	assert(name == "Errors")
+	return luau.load(fs.readFile("dist/modules/Errors.luau"))()(function() error("Unexpected dependency") end)
+end)
 local reader = Reader.new()
 local function scriptItem(source)
 	return setmetatable({ source = source, IsA = function(_, class) return class == "LuaSourceContainer" end }, {
@@ -59,7 +63,7 @@ work()
 assert(callbacks == before, "Cancelled reader updated the viewer")
 reader:Read(direct, callback, true)
 for _, timeout in timers do timeout() end
-assert(result == nil and string.find(message, "timed out", 1, true), "Timeout failed")
+assert(result == nil and string.find(message, "E203", 1, true), "Timeout failed")
 before = callbacks
 work()
 assert(callbacks == before, "Late decompiler result replaced timeout")

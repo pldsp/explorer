@@ -6,6 +6,7 @@ local Selection = require(script.Parent.Selection)
 local Janitor = require(script.Parent.Janitor)
 local Config = require(script.Parent.Config)
 local ScriptViewer = require(script.Parent.ScriptViewer)
+local Notifications = require(script.Parent.Notifications)
 local App = {}
 App.__index = App
 
@@ -14,6 +15,7 @@ function App.new(parent)
 	local ok, err = xpcall(function()
 	self.window = Window.new(parent)
 	local window = self.window
+	self.notifications = Notifications.new(window.gui)
 	self.inspector = Inspector.new(window.inspector, function(message, isError) window:SetStatus(message, isError) end, window.propertySearch)
 	self.scriptViewer = ScriptViewer.new(window.gui, window.frame)
 	window.onToggle = function(visible) if not visible then self.scriptViewer:Hide() end end
@@ -75,9 +77,18 @@ function App.new(parent)
 	end))
 	self.janitor:Add(window.close.Activated:Connect(function() self:Destroy() end))
 	self.janitor:Add(window.gui.Destroying:Connect(function() self:Destroy() end))
+	window:Enter()
 	end, debug.traceback)
 	if not ok then self:Destroy(); error(err, 0) end
 	return self
+end
+
+function App:Notify(code, detail)
+	if not self.dead then self.notifications:Show(code, detail) end
+end
+
+function App:Reveal()
+	if not self.dead then self.window:SetShown(true) end
 end
 
 function App:Destroy()
@@ -85,7 +96,7 @@ function App:Destroy()
 	self.dead = true
 	self.searchVersion += 1
 	self.janitor:Destroy()
-	for _, name in { "tree", "selection", "scriptViewer", "inspector", "view", "window" } do
+	for _, name in { "tree", "selection", "scriptViewer", "inspector", "view", "notifications", "window" } do
 		if self[name] then self[name]:Destroy() end
 	end
 end

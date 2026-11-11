@@ -3,6 +3,7 @@ local Config = require(script.Parent.Config)
 local Janitor = require(script.Parent.Janitor)
 local Icons = require(script.Parent.Icons)
 local Drag = require(script.Parent.Drag)
+local Motion = require(script.Parent.Motion)
 local Input = game:GetService("UserInputService")
 local Window = {}
 Window.__index = Window
@@ -25,9 +26,10 @@ local function overlapButton(parent)
 end
 
 function Window.new(parent)
-	local self = setmetatable({ janitor = Janitor.new(), propertiesOpen = true, dockWidth = Config.DockWidth, ratio = Config.DockRatio, floatingProperties = false, showingPath = false }, Window)
+	local self = setmetatable({ janitor = Janitor.new(), motion = Motion.new(), propertiesOpen = true, shown = true, entered = false, dockWidth = Config.DockWidth, ratio = Config.DockRatio, floatingProperties = false, showingPath = false }, Window)
 	self.gui = UI.new("ScreenGui", { Name = "ExplorerPlus", ResetOnSpawn = false, DisplayOrder = 10000, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = false }, parent)
-	self.frame = UI.frame(self.gui, { Name = "StudioDock", BackgroundTransparency = 1, Active = true, ClipsDescendants = false, BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(29, 29, 29) })
+	self.frame = UI.group(self.gui, { Name = "StudioDock", GroupTransparency = 1, BackgroundTransparency = 1, Active = true, ClipsDescendants = false, BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(29, 29, 29) })
+	self.propertyAmount = UI.new("NumberValue", { Name = "PropertyAnimation", Value = 1 }, self.gui)
 	self.explorerBody = UI.frame(self.frame, { Name = "Explorer", BackgroundTransparency = Config.PanelTransparency, ClipsDescendants = true })
 	local title = UI.frame(self.explorerBody, { Name = "ExplorerTitle", Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = Color3.fromRGB(51, 51, 51) })
 	UI.text(title, "Explorer", { Position = UDim2.fromOffset(5, 0), Size = UDim2.new(1, -48, 1, 0) })
@@ -39,7 +41,7 @@ function Window.new(parent)
 	self.search = searchBar(self.explorerBody, "Search workspace", "Search")
 	self.tree = UI.frame(self.explorerBody, { Name = "Tree", Position = UDim2.fromOffset(1, 43), BackgroundTransparency = 1 })
 	self.status = UI.text(self.explorerBody, "", { Name = "Status", Visible = false, TextSize = 11, TextColor3 = Config.Colors.Error, BackgroundTransparency = 0.1, BackgroundColor3 = Config.Colors.Panel, ZIndex = 11 })
-	self.propertyFrame = UI.frame(self.frame, { Name = "Properties", Active = true, ClipsDescendants = true, BackgroundTransparency = Config.PanelTransparency, BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(29, 29, 29) })
+	self.propertyFrame = UI.group(self.frame, { Name = "Properties", Active = true, ClipsDescendants = true, BackgroundTransparency = Config.PanelTransparency, BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(29, 29, 29) })
 	local propertyTitle = UI.frame(self.propertyFrame, { Size = UDim2.new(1, 0, 0, 20), BackgroundColor3 = Color3.fromRGB(51, 51, 51), Active = true })
 	UI.text(propertyTitle, "Properties", { Position = UDim2.fromOffset(5, 0), Size = UDim2.new(1, -48, 1, 0) })
 	self.propertyFloat = overlapButton(propertyTitle)
@@ -52,7 +54,7 @@ function Window.new(parent)
 	local floatGrip = UI.button(self.propertyFrame, "◢", { Position = UDim2.new(1, -14, 1, -14), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, Visible = false })
 	self.floatGrip = floatGrip
 	Drag.Attach(self.propertyFrame, propertyTitle, floatGrip, self.janitor, self.gui, function() return self.floatingProperties end)
-	self.menu = UI.frame(self.gui, { Name = "ContextMenu", Size = UDim2.fromOffset(202, 176), Visible = false, ZIndex = 20, BorderSizePixel = 1, BorderColor3 = Config.Colors.Border })
+	self.menu = UI.group(self.gui, { Name = "ContextMenu", Size = UDim2.fromOffset(202, 176), Visible = false, GroupTransparency = 1, ZIndex = 20, BorderSizePixel = 1, BorderColor3 = Config.Colors.Border })
 	local actions = { { "scriptAction", "View script", "LocalScript" }, { "propertiesAction", "Properties", "Configuration" }, { "focus", "Focus selection", "Camera" }, { "reveal", "Reveal in Explorer", "Folder" }, { "copy", "Copy path", "StringValue" }, { "refresh", "Refresh", "Workspace" } }
 	for index, action in actions do
 		local button = UI.button(self.menu, action[2], { Name = action[1], Position = UDim2.fromOffset(2, (index - 1) * 28 + 4), Size = UDim2.new(1, -4, 0, 27), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21, BackgroundTransparency = 1 })
@@ -61,9 +63,11 @@ function Window.new(parent)
 		local icon = Icons.new(button)
 		Icons.set(icon, { ClassName = action[3] })
 		icon.root.Position, icon.root.ZIndex = UDim2.fromOffset(-24, 5), 22
-		self.janitor:Add(button.Activated:Connect(function() self.menu.Visible = false end))
+		self.janitor:Add(button.Activated:Connect(function() self:CloseMenu() end))
+		self.motion:Button(button, self.janitor)
 	end
 	self.viewScript = self.scriptAction
+	for _, button in { self.hide, self.restore, self.close, self.properties, self.propertyFloat, propertyClose } do self.motion:Button(button, self.janitor) end
 	self.janitor:Add(self.hide.Activated:Connect(function() self:Toggle() end))
 	self.janitor:Add(self.restore.Activated:Connect(function() self:Toggle() end))
 	self.janitor:Add(self.properties.Activated:Connect(function() self:ShowProperties(not self.propertiesOpen) end))
@@ -81,13 +85,15 @@ function Window.new(parent)
 			self.propertyFrame.ZIndex = 1
 		end
 		self:Clamp()
+		self.propertyFrame.GroupTransparency = 1
+		self.motion:To(self.propertyFrame, { GroupTransparency = 0 }, 0.25)
 	end))
 	self.janitor:Add(self.propertiesAction.Activated:Connect(function() self:ShowProperties(true) end))
 	self.janitor:Add(Input.InputBegan:Connect(function(input, processed)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			local point = Input:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset()
 			local position, size = self.menu.AbsolutePosition, self.menu.AbsoluteSize
-			if point.X < position.X or point.Y < position.Y or point.X > position.X + size.X or point.Y > position.Y + size.Y then self.menu.Visible = false end
+			if point.X < position.X or point.Y < position.Y or point.X > position.X + size.X or point.Y > position.Y + size.Y then self:CloseMenu() end
 		end
 		if Input:GetFocusedTextBox() then return end
 		if not processed and input.KeyCode == Config.ToggleKey then self:Toggle() end
@@ -118,6 +124,7 @@ function Window.new(parent)
 		self:Clamp()
 	end))
 	self.janitor:Add(self.gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() self:Clamp() end))
+	self.janitor:Add(self.propertyAmount.Changed:Connect(function() self:Clamp() end))
 	task.defer(function() if self.gui.Parent then self:Clamp() end end)
 	return self
 end
@@ -129,15 +136,25 @@ end
 
 function Window:ShowProperties(show)
 	self.propertiesOpen = show
-	self.propertyFrame.Visible = show and self.frame.Visible
-	self:Clamp()
+	self.propertyFrame.Visible = self.shown
+	self.motion:To(self.propertyAmount, { Value = show and 1 or 0 }, 0.32, Enum.EasingStyle.Quint, function()
+		self.propertyFrame.Visible = show and self.shown
+	end)
+end
+
+function Window:CloseMenu()
+	if not self.menu.Visible then return end
+	self.motion:To(self.menu, { GroupTransparency = 1 }, 0.12, nil, function() self.menu.Visible = false end)
 end
 
 function Window:OpenMenu()
 	local point = Input:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset()
 	local bounds = self.gui.AbsoluteSize
-	self.menu.Position = UDim2.fromOffset(math.clamp(point.X, 0, math.max(0, bounds.X - 202)), math.clamp(point.Y, 0, math.max(0, bounds.Y - 176)))
+	local position = UDim2.fromOffset(math.clamp(point.X, 0, math.max(0, bounds.X - 202)), math.clamp(point.Y, 0, math.max(0, bounds.Y - 176)))
+	self.menu.Position = position + UDim2.fromOffset(0, 8)
+	self.menu.GroupTransparency = 1
 	self.menu.Visible = true
+	self.motion:To(self.menu, { Position = position, GroupTransparency = 0 }, 0.19, Enum.EasingStyle.Quint)
 end
 
 function Window:Clamp()
@@ -145,13 +162,16 @@ function Window:Clamp()
 	if bounds.X == 0 or bounds.Y == 0 then return end
 	self.dockWidth = math.clamp(self.dockWidth, math.min(240, bounds.X), math.min(760, bounds.X))
 	local height = math.max(0, bounds.Y - Config.DockTop)
-	self.frame.Position = UDim2.new(1, -self.dockWidth, 0, Config.DockTop)
+	self.basePosition = UDim2.new(1, -self.dockWidth, 0, Config.DockTop)
+	if not self.motion:Busy(self.frame) then self.frame.Position = self.shown and self.basePosition or UDim2.new(1, 16, 0, Config.DockTop) end
 	self.frame.Size = UDim2.new(0, self.dockWidth, 1, -Config.DockTop)
-	local split = self.propertiesOpen and not self.floatingProperties and math.floor(height * self.ratio) or height
+	local amount = self.floatingProperties and 0 or self.propertyAmount.Value
+	local split = math.floor(height * (1 - (1 - self.ratio) * amount))
+	if not self.floatingProperties then self.propertyFrame.GroupTransparency = 1 - self.propertyAmount.Value end
 	self.explorerBody.Size = UDim2.new(1, 0, 0, math.max(0, split - 2))
 	self.tree.Size = UDim2.new(1, -2, 1, -44)
 	self.status.Position, self.status.Size = UDim2.new(0, 6, 1, -22), UDim2.new(1, -12, 0, 20)
-	self.splitGrip.Visible = self.propertiesOpen and not self.floatingProperties
+	self.splitGrip.Visible = amount > 0.01 and not self.floatingProperties
 	self.splitGrip.Position = UDim2.fromOffset(0, split - 2)
 	if not self.floatingProperties then
 		self.propertyFrame.Position = UDim2.fromOffset(0, split + 2)
@@ -159,13 +179,34 @@ function Window:Clamp()
 	end
 end
 
+function Window:SetShown(show, entrance)
+	self.shown = show
+	self.hide.Visible, self.restore.Visible = show, not show
+	self:CloseMenu()
+	if show then
+		self.frame.Visible = true
+		self.propertyFrame.Visible = self.propertiesOpen
+		if entrance then self.frame.Position, self.frame.GroupTransparency = UDim2.new(1, 16, 0, Config.DockTop), 1 end
+		self.motion:To(self.frame, { Position = self.basePosition, GroupTransparency = 0 }, entrance and 0.52 or 0.36, Enum.EasingStyle.Quint)
+		if self.floatingProperties and self.propertiesOpen then
+			self.propertyFrame.Visible = true
+			self.motion:To(self.propertyFrame, { GroupTransparency = 0 }, 0.3)
+		end
+	else
+		self.motion:To(self.frame, { Position = UDim2.new(1, 16, 0, Config.DockTop), GroupTransparency = 1 }, 0.28, Enum.EasingStyle.Quart, function() self.frame.Visible = false end)
+		if self.floatingProperties then self.motion:To(self.propertyFrame, { GroupTransparency = 1 }, 0.2, nil, function() self.propertyFrame.Visible = false end) end
+	end
+	if self.onToggle then self.onToggle(show) end
+end
+
+function Window:Enter()
+	self:Clamp()
+	self.entered = true
+	self:SetShown(true, true)
+end
+
 function Window:Toggle()
-	self.frame.Visible = not self.frame.Visible
-	self.hide.Visible = self.frame.Visible
-	self.restore.Visible = not self.frame.Visible
-	self.propertyFrame.Visible = self.frame.Visible and self.propertiesOpen
-	self.menu.Visible = false
-	if self.onToggle then self.onToggle(self.frame.Visible) end
+	self:SetShown(not self.shown)
 end
 
 function Window:SetStatus(message, isError)
@@ -174,6 +215,7 @@ function Window:SetStatus(message, isError)
 end
 
 function Window:Destroy()
+	self.motion:Destroy()
 	self.janitor:Destroy()
 	self.gui:Destroy()
 end
